@@ -2,41 +2,44 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 async function cleanupExpiredReservations() {
-  const expired = await prisma.reservation.findMany({
-    where: {
-      status: 'pending',
-      expiresAt: { lt: new Date() }
-    }
-  })
-  
-  for (const reservation of expired) {
-    await prisma.$transaction(async (tx) => {
-      await tx.reservation.update({
-        where: { id: reservation.id },
-        data: { status: 'released' }
-      })
-      await tx.inventory.update({
-        where: {
-          productId_warehouseId: {
-            productId: reservation.productId,
-            warehouseId: reservation.warehouseId
-          }
-        },
-        data: { reservedUnits: { decrement: reservation.quantity } }
-      })
+  try {
+    const expired = await prisma.reservation.findMany({
+      where: {
+        status: 'pending',
+        expiresAt: { lt: new Date() }
+      }
     })
-  }
-  
-  if (expired.length > 0) {
-    console.log(`Cleaned up ${expired.length} expired reservations`)
+    
+    for (const reservation of expired) {
+      await prisma.$transaction(async (tx) => {
+        await tx.reservation.update({
+          where: { id: reservation.id },
+          data: { status: 'released' }
+        })
+        await tx.inventory.update({
+          where: {
+            productId_warehouseId: {
+              productId: reservation.productId,
+              warehouseId: reservation.warehouseId
+            }
+          },
+          data: { reservedUnits: { decrement: reservation.quantity } }
+        })
+      })
+    }
+    
+    if (expired.length > 0) {
+      console.log(`Cleaned up ${expired.length} expired reservations`)
+    }
+  } catch (error) {
+    console.error('Cleanup error:', error)
   }
 }
 
 export async function GET() {
-  // Clean up expired reservations first
-  await cleanupExpiredReservations()
-  
   try {
+    await cleanupExpiredReservations()
+    
     const products = await prisma.product.findMany({
       include: {
         inventory: {
@@ -47,11 +50,11 @@ export async function GET() {
       }
     })
 
-    const formattedProducts = products.map((product: any) => ({
+    const formattedProducts = products.map((product) => ({
       productId: product.id,
       name: product.name,
       description: product.description,
-      warehouses: product.inventory.map((inv: any) => ({
+      warehouses: product.inventory.map((inv) => ({
         warehouseId: inv.warehouse.id,
         warehouseName: inv.warehouse.name,
         location: inv.warehouse.location,
