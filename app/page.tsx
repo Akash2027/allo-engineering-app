@@ -40,15 +40,15 @@ export default function Home() {
     }
   }
 
-  const handleReserve = async (productId: string, warehouseId: string, quantity: number = 1) => {
-    setReserving(productId)
+  const handleReserve = async (productId: string, warehouseId: string) => {
+    setReserving(`${productId}-${warehouseId}`)
     setError(null)
 
     try {
       const res = await fetch('/api/reservations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, warehouseId, quantity }),
+        body: JSON.stringify({ productId, warehouseId, quantity: 1 }),
       })
 
       const data = await res.json()
@@ -65,7 +65,6 @@ export default function Home() {
         return
       }
 
-      // Redirect to checkout page
       router.push(`/checkout/${data.reservationId}`)
     } catch (err) {
       setError('Network error')
@@ -75,49 +74,73 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading products...</div>
+      <div className="min-h-screen bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+        <div className="text-2xl font-bold text-white">Loading amazing products...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Products</h1>
+    <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-5xl font-bold text-white mb-4 drop-shadow-lg">🛍️ Reserve & Checkout</h1>
+          <p className="text-white text-lg opacity-90">Reserve now, pay later - Your items are held for 10 minutes!</p>
+        </div>
 
+        {/* Error message */}
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+          <div className="mb-6 bg-red-500 text-white px-6 py-3 rounded-xl shadow-lg text-center font-semibold">
+            ⚠️ {error}
           </div>
         )}
 
-        <div className="grid gap-6">
+        {/* Product Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {products.map((product) => (
-            <div key={product.productId} className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-2xl font-semibold mb-2">{product.name}</h2>
-              <p className="text-gray-600 mb-4">{product.description}</p>
+            <div key={product.productId} className="bg-white rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-105 hover:shadow-3xl">
+              {/* Card Header */}
+              <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-5">
+                <h2 className="text-2xl font-bold text-white">{product.name}</h2>
+                <p className="text-purple-100 text-sm mt-1">{product.description}</p>
+              </div>
 
-              <h3 className="font-semibold mb-2">Available Stock:</h3>
-              <div className="space-y-3">
-                {product.warehouses.map((warehouse) => (
-                  <div key={warehouse.warehouseId} className="flex justify-between items-center border-t pt-2">
-                    <div>
-                      <p className="font-medium">{warehouse.warehouseName}</p>
-                      <p className="text-sm text-gray-500">{warehouse.location}</p>
-                      <p className="text-green-600 font-semibold">
-                        Available: {warehouse.availableUnits} units
-                      </p>
+              {/* Card Body */}
+              <div className="p-5">
+                <h3 className="font-bold text-gray-700 mb-3 text-lg">📍 Available Stock</h3>
+                <div className="space-y-3">
+                  {product.warehouses.map((warehouse) => (
+                    <div key={warehouse.warehouseId} className="border-2 rounded-xl p-4 bg-gray-50 hover:border-purple-300 transition-colors">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <p className="font-bold text-gray-800 text-lg">{warehouse.warehouseName}</p>
+                          <p className="text-xs text-gray-500">{warehouse.location}</p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${warehouse.availableUnits > 0 ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+                          {warehouse.availableUnits > 0 ? `${warehouse.availableUnits} left` : 'Out of Stock'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center mt-3">
+                        <div className="text-3xl font-black text-gray-800">
+                          {warehouse.availableUnits}
+                          <span className="text-sm font-normal text-gray-500"> available</span>
+                        </div>
+                        <button
+                          onClick={() => handleReserve(product.productId, warehouse.warehouseId)}
+                          disabled={reserving === `${product.productId}-${warehouse.warehouseId}` || warehouse.availableUnits === 0}
+                          className={`px-5 py-2 rounded-xl font-bold transition-all duration-200 transform hover:scale-105 ${
+                            warehouse.availableUnits > 0
+                              ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg'
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                        >
+                          {reserving === `${product.productId}-${warehouse.warehouseId}` ? '⏳ Holding...' : '🎯 Reserve Now'}
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => handleReserve(product.productId, warehouse.warehouseId, 1)}
-                      disabled={reserving === product.productId || warehouse.availableUnits === 0}
-                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                      {reserving === product.productId ? 'Reserving...' : 'Reserve'}
-                    </button>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           ))}
