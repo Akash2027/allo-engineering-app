@@ -33,7 +33,6 @@ async function cleanupExpiredReservations() {
 }
 
 export async function POST(request: NextRequest) {
-  // Clean up expired reservations first
   await cleanupExpiredReservations()
   
   try {
@@ -48,9 +47,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Quantity must be positive' }, { status: 400 })
     }
 
-    // Transaction to prevent race condition
     const result = await prisma.$transaction(async (tx) => {
-      // Get inventory
       const inventory = await tx.inventory.findFirst({
         where: {
           productId: productId,
@@ -68,13 +65,11 @@ export async function POST(request: NextRequest) {
         throw new Error('Not enough stock')
       }
 
-      // Update inventory
       await tx.inventory.update({
         where: { id: inventory.id },
         data: { reservedUnits: inventory.reservedUnits + quantity },
       })
 
-      // Create reservation
       const expiresAt = new Date(Date.now() + 10 * 60000)
 
       const reservation = await tx.reservation.create({
