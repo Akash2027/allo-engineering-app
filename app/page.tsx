@@ -1,65 +1,128 @@
-import Image from "next/image";
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+
+interface Warehouse {
+  warehouseId: string
+  warehouseName: string
+  location: string
+  availableUnits: number
+}
+
+interface Product {
+  productId: string
+  name: string
+  description: string
+  warehouses: Warehouse[]
+}
 
 export default function Home() {
+  const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
+  const [reserving, setReserving] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+
+  useEffect(() => {
+    fetchProducts()
+  }, [])
+
+  const fetchProducts = async () => {
+    try {
+      const res = await fetch('/api/products')
+      const data = await res.json()
+      setProducts(data)
+      setLoading(false)
+    } catch (err) {
+      setError('Failed to load products')
+      setLoading(false)
+    }
+  }
+
+  const handleReserve = async (productId: string, warehouseId: string, quantity: number = 1) => {
+    setReserving(productId)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/reservations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, warehouseId, quantity }),
+      })
+
+      const data = await res.json()
+
+      if (res.status === 409) {
+        setError('Not enough stock available')
+        setReserving(null)
+        return
+      }
+
+      if (!res.ok) {
+        setError('Failed to create reservation')
+        setReserving(null)
+        return
+      }
+
+      // Redirect to checkout page
+      router.push(`/checkout/${data.reservationId}`)
+    } catch (err) {
+      setError('Network error')
+      setReserving(null)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl">Loading products...</div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-gray-100 p-8">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8">Products</h1>
+
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
+
+        <div className="grid gap-6">
+          {products.map((product) => (
+            <div key={product.productId} className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-2xl font-semibold mb-2">{product.name}</h2>
+              <p className="text-gray-600 mb-4">{product.description}</p>
+
+              <h3 className="font-semibold mb-2">Available Stock:</h3>
+              <div className="space-y-3">
+                {product.warehouses.map((warehouse) => (
+                  <div key={warehouse.warehouseId} className="flex justify-between items-center border-t pt-2">
+                    <div>
+                      <p className="font-medium">{warehouse.warehouseName}</p>
+                      <p className="text-sm text-gray-500">{warehouse.location}</p>
+                      <p className="text-green-600 font-semibold">
+                        Available: {warehouse.availableUnits} units
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleReserve(product.productId, warehouse.warehouseId, 1)}
+                      disabled={reserving === product.productId || warehouse.availableUnits === 0}
+                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                      {reserving === product.productId ? 'Reserving...' : 'Reserve'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </div>
     </div>
-  );
+  )
 }
