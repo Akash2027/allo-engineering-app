@@ -3,30 +3,16 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
-interface Reservation {
-  id: string
-  quantity: number
-  status: string
-  expiresAt: string
-  product: {
-    name: string
-  }
-  warehouse: {
-    name: string
-    location: string
-  }
-}
-
 export default function CheckoutPage() {
   const params = useParams()
   const router = useRouter()
   const reservationId = params.reservationId as string
 
-  const [reservation, setReservation] = useState<Reservation | null>(null)
-  const [timeLeft, setTimeLeft] = useState<number>(0)
+  const [reservation, setReservation] = useState<any>(null)
+  const [timeLeft, setTimeLeft] = useState(0)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (reservationId) {
@@ -35,48 +21,30 @@ export default function CheckoutPage() {
   }, [reservationId])
 
   useEffect(() => {
-    if (reservation && reservation.expiresAt) {
-      const updateTimer = () => {
+    if (reservation?.expiresAt) {
+      const interval = setInterval(() => {
         const expiry = new Date(reservation.expiresAt).getTime()
         const now = new Date().getTime()
         const remaining = Math.max(0, Math.floor((expiry - now) / 1000))
         setTimeLeft(remaining)
-        
-        if (remaining === 0) {
-          setError('Reservation has expired')
-        }
-      }
-      
-      updateTimer()
-      const interval = setInterval(updateTimer, 1000)
+        if (remaining === 0) setError('Reservation expired')
+      }, 1000)
       return () => clearInterval(interval)
     }
   }, [reservation])
 
   const fetchReservation = async () => {
     try {
-      console.log('Fetching reservation:', reservationId)
       const res = await fetch(`/api/reservations/${reservationId}`)
-      console.log('Response status:', res.status)
-      
-      if (res.status === 404) {
-        setError('Reservation not found')
-        setLoading(false)
-        return
-      }
-      
       if (res.status === 410) {
         setError('Reservation expired')
         setLoading(false)
         return
       }
-      
       const data = await res.json()
-      console.log('Reservation data:', data)
       setReservation(data)
       setLoading(false)
     } catch (err) {
-      console.error('Fetch error:', err)
       setError('Failed to load reservation')
       setLoading(false)
     }
@@ -84,77 +52,46 @@ export default function CheckoutPage() {
 
   const handleConfirm = async () => {
     setProcessing(true)
-    setError(null)
-
-    try {
-      const res = await fetch(`/api/reservations/${reservationId}/confirm`, {
-        method: 'POST',
-      })
-
-      if (res.status === 410) {
-        setError('Reservation has expired')
-        setProcessing(false)
-        return
-      }
-
-      if (res.ok) {
-        router.push('/?confirmed=true')
-      } else {
-        const data = await res.json()
-        setError(data.error || 'Failed to confirm purchase')
-        setProcessing(false)
-      }
-    } catch (err) {
-      setError('Network error')
-      setProcessing(false)
+    const res = await fetch(`/api/reservations/${reservationId}/confirm`, { method: 'POST' })
+    if (res.status === 410) {
+      setError('Reservation expired')
+    } else if (res.ok) {
+      router.push('/?confirmed=true')
+    } else {
+      setError('Failed to confirm')
     }
+    setProcessing(false)
   }
 
   const handleCancel = async () => {
     setProcessing(true)
-    setError(null)
-
-    try {
-      const res = await fetch(`/api/reservations/${reservationId}/release`, {
-        method: 'POST',
-      })
-
-      if (res.ok) {
-        router.push('/?cancelled=true')
-      } else {
-        const data = await res.json()
-        setError(data.error || 'Failed to cancel')
-        setProcessing(false)
-      }
-    } catch (err) {
-      setError('Network error')
-      setProcessing(false)
+    const res = await fetch(`/api/reservations/${reservationId}/release`, { method: 'POST' })
+    if (res.ok) {
+      router.push('/?cancelled=true')
+    } else {
+      setError('Failed to cancel')
     }
-  }
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
+    setProcessing(false)
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading reservation...</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-500">Loading reservation...</div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded">
-          <h2 className="font-bold text-lg mb-2">Error</h2>
-          <p>{error}</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white border border-gray-200 rounded-lg p-8 max-w-md text-center">
+          <div className="text-5xl mb-4">⚠️</div>
+          <h2 className="text-xl font-medium text-gray-900 mb-2">Error</h2>
+          <p className="text-gray-500 mb-6">{error}</p>
           <button
             onClick={() => router.push('/')}
-            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            className="bg-gray-900 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-700"
           >
             Back to Products
           </button>
@@ -163,66 +100,77 @@ export default function CheckoutPage() {
     )
   }
 
-  if (!reservation) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">No reservation data</div>
-      </div>
-    )
-  }
+  if (!reservation) return null
+
+  const mins = Math.floor(timeLeft / 60)
+  const secs = timeLeft % 60
+  const isExpiringSoon = timeLeft < 60
+  const isUrgent = timeLeft < 30
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <h1 className="text-2xl font-bold mb-6">Checkout</h1>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-2xl mx-auto px-6 py-6">
+          <h1 className="text-2xl font-light text-gray-900">Complete your reservation</h1>
+          <p className="text-gray-500 text-sm mt-1">Confirm your purchase within the time limit</p>
+        </div>
+      </div>
 
-          <div className="space-y-4 mb-6">
-            <div className="border-b pb-3">
-              <p className="text-gray-600">Product:</p>
-              <p className="font-semibold text-lg">{reservation.product?.name || 'Loading...'}</p>
+      {/* Checkout Card */}
+      <div className="max-w-2xl mx-auto px-6 py-8">
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          {/* Timer Section */}
+          <div className={`text-center py-6 border-b ${isExpiringSoon ? 'bg-red-50' : 'bg-gray-50'}`}>
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Time remaining to confirm</p>
+            <div className={`text-4xl font-mono font-medium ${isUrgent ? 'text-red-600 animate-pulse' : isExpiringSoon ? 'text-red-500' : 'text-gray-900'}`}>
+              {mins}:{secs.toString().padStart(2, '0')}
             </div>
+            {isExpiringSoon && (
+              <p className="text-xs text-red-500 mt-2">⚠️ Reservation expiring soon</p>
+            )}
+          </div>
 
-            <div className="border-b pb-3">
-              <p className="text-gray-600">Warehouse:</p>
-              <p className="font-semibold">{reservation.warehouse?.name || 'Loading...'}</p>
-              <p className="text-sm text-gray-500">{reservation.warehouse?.location || ''}</p>
+          {/* Reservation Details */}
+          <div className="p-6 space-y-4">
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-500 text-sm">Product</span>
+              <span className="text-gray-900 font-medium">{reservation.product?.name}</span>
             </div>
-
-            <div className="border-b pb-3">
-              <p className="text-gray-600">Quantity:</p>
-              <p className="font-semibold">{reservation.quantity}</p>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-500 text-sm">Warehouse</span>
+              <div className="text-right">
+                <span className="text-gray-900 font-medium">{reservation.warehouse?.name}</span>
+                <span className="text-gray-400 text-xs ml-2">{reservation.warehouse?.location}</span>
+              </div>
             </div>
-
-            <div className="border-b pb-3">
-              <p className="text-gray-600">Time Left to Confirm:</p>
-              <p className={`font-bold text-2xl ${timeLeft < 60 ? 'text-red-600' : 'text-green-600'}`}>
-                {formatTime(timeLeft)}
-              </p>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-500 text-sm">Quantity</span>
+              <span className="text-gray-900 font-medium">1 unit</span>
             </div>
           </div>
 
-          <div className="flex gap-4">
+          {/* Actions */}
+          <div className="border-t border-gray-200 p-6 bg-gray-50 flex gap-3">
             <button
               onClick={handleConfirm}
               disabled={processing || timeLeft === 0}
-              className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="flex-1 bg-gray-900 text-white px-6 py-2.5 rounded-md text-sm font-medium hover:bg-gray-700 disabled:opacity-50 transition-colors"
             >
-              {processing ? 'Processing...' : 'Confirm Purchase'}
+              {processing ? 'Processing...' : 'Confirm purchase'}
             </button>
-
             <button
               onClick={handleCancel}
-              disabled={processing || timeLeft === 0}
-              className="flex-1 bg-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              disabled={processing}
+              className="flex-1 border border-gray-300 bg-white text-gray-700 px-6 py-2.5 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
             >
               Cancel
             </button>
           </div>
 
           {error && (
-            <div className="mt-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-              {error}
+            <div className="border-t border-red-200 bg-red-50 p-4">
+              <p className="text-red-600 text-sm text-center">⚠️ {error}</p>
             </div>
           )}
         </div>
